@@ -242,7 +242,7 @@ class Sort(object):
         self.trackers = []
         self.frame_count = 0
 
-    def update(self, dets=np.empty((0, 5))):
+    def update(self, dets=np.empty((0, 5))):  # TODO return the original dets too
         """
         Params:
           dets - a numpy array of detections in the format [[x1,y1,x2,y2,score],[x1,y1,x2,y2,score],...]
@@ -268,20 +268,28 @@ class Sort(object):
             dets, trks, self.iou_threshold
         )
 
+        og_ret = []
         # update matched trackers with assigned detections
         for m in matched:
             self.trackers[m[1]].update(dets[m[0], :])
+            og_ret.append(
+                np.concatenate((dets[m[0], :], [self.trackers[m[1]].id + 1])).reshape(
+                    1, -1
+                )
+            )
 
         # create and initialise new trackers for unmatched detections
         for i in unmatched_dets:
             trk = KalmanBoxTracker(dets[i, :])
             self.trackers.append(trk)
+
         i = len(self.trackers)
         for trk in reversed(self.trackers):
             d = trk.get_state()[0]
             if (trk.time_since_update < 1) and (
                 trk.hit_streak >= self.min_hits or self.frame_count <= self.min_hits
             ):
+                # MODIFY return not to return predicted, but original roi
                 ret.append(
                     np.concatenate((d, [trk.id + 1])).reshape(1, -1)
                 )  # +1 as MOT benchmark requires positive
@@ -289,8 +297,8 @@ class Sort(object):
             # remove dead tracklet
             if trk.time_since_update > self.max_age:
                 self.trackers.pop(i)
-        if len(ret) > 0:
-            return np.concatenate(ret)
+        if len(og_ret) > 0:
+            return np.concatenate(og_ret)
         return np.empty((0, 5))
 
 
